@@ -1,25 +1,27 @@
-# Add dependencies
 import sys
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QAction , QPainter
-from PySide6.QtWidgets import (QApplication, QHeaderView, QHBoxLayout, QLabel, QLineEdit, 
-                               QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, 
-                               QWidget)
+from PySide6.QtGui import QAction, QPainter
+from PySide6.QtWidgets import (QApplication, QHeaderView, QHBoxLayout, QLabel, QLineEdit, QMainWindow, 
+                               QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 from PySide6.QtCharts import QChartView, QPieSeries, QChart
 
-
-
-class Widget(QWidget):
+class ExpenseTracker(QWidget):
     def __init__(self):
         QWidget.__init__(self)
-        self.items = 0
-        self._test = {"Rent": 1200, "Internet": 170, "Grocery": 500, "Phone": 175, "Gas": 400, "Car": 450}
+        self.expense_count = 0
+        
+        #self.expense_data = {"Rent": 1200, "Internet": 170, "Grocery": 500, "Phone": 175, "Gas": 400, "Car": 450}
 
         # Left Side
         self.table = QTableWidget()
         self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Description", "Expense"])
+        self.table.setHorizontalHeaderLabels(["Description", "Expense in $"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # Total Label and Value
+        self.total_label = QLabel("Total:")
+        self.total_value = QLabel("0.00")
+        self.total_value.setAlignment(Qt.AlignRight)
 
         # Chart
         self.chart_view = QChartView()
@@ -44,13 +46,13 @@ class Widget(QWidget):
         self.right.addWidget(self.add)
         self.right.addWidget(self.plot)
         self.right.addWidget(self.chart_view)
+        self.right.addWidget(self.total_label)
+        self.right.addWidget(self.total_value)
         self.right.addWidget(self.clear)
         self.right.addWidget(self.quit)
 
         # QWidget Layout
         self.layout = QHBoxLayout()
-
-        #self.table_view.setSizePolicy(size)
         self.layout.addWidget(self.table)
         self.layout.addLayout(self.right)
 
@@ -58,38 +60,40 @@ class Widget(QWidget):
         self.setLayout(self.layout)
 
         # Signals and Slots
-        self.add.clicked.connect(self.add_element)
+        self.add.clicked.connect(self.add_expense)
         self.quit.clicked.connect(self.quit_application)
-        self.plot.clicked.connect(self.plot_data)
+        self.plot.clicked.connect(self.plot_expenses)
         self.clear.clicked.connect(self.clear_table)
         self.description.textChanged[str].connect(self.check_disable)
         self.price.textChanged[str].connect(self.check_disable)
 
-        # Fill example data
-        self.fill_table()
-
     @Slot()
-    def add_element(self):
-        des = self.description.text()
+    def add_expense(self):
+        description = self.description.text()
         price = self.price.text()
 
         try:
+            # Remove the "$" sign if it exists
+            price = price.replace('$', '')
+
             price_item = QTableWidgetItem(f"{float(price):.2f}")
             price_item.setTextAlignment(Qt.AlignRight)
 
-            self.table.insertRow(self.items)
-            description_item = QTableWidgetItem(des)
+            self.table.insertRow(self.expense_count)
+            description_item = QTableWidgetItem(description)
 
-            self.table.setItem(self.items, 0, description_item)
-            self.table.setItem(self.items, 1, price_item)
+            self.table.setItem(self.expense_count, 0, description_item)
+            self.table.setItem(self.expense_count, 1, price_item)
 
             self.description.setText("")
             self.price.setText("")
 
-            self.items += 1
-        except ValueError:
-            print("That is not an invalid input:", price, "Make sure to enter a price!")
+            self.expense_count += 1
 
+            # Update the total
+            self.update_total()
+        except ValueError:
+            print("Invalid input for price:", price, "Make sure to enter a valid price!")
 
     @Slot()
     def check_disable(self, x):
@@ -99,7 +103,7 @@ class Widget(QWidget):
             self.add.setEnabled(True)
 
     @Slot()
-    def plot_data(self):
+    def plot_expenses(self):
         # Get table information
         series = QPieSeries()
         for i in range(self.table.rowCount()):
@@ -112,31 +116,37 @@ class Widget(QWidget):
         chart.legend().setAlignment(Qt.AlignLeft)
         self.chart_view.setChart(chart)
 
+        # Update the total after plotting
+        total = self.calculate_total()
+        self.total_value.setText(f"${total:.2f}")
+
     @Slot()
     def quit_application(self):
         QApplication.quit()
 
-    def fill_table(self, data=None):
-        data = self._test if not data else data
-        for desc, price in data.items():
-            description_item = QTableWidgetItem(desc)
-            price_item = QTableWidgetItem(f"{price:.2f}")
-            price_item.setTextAlignment(Qt.AlignRight)
-            self.table.insertRow(self.items)
-            self.table.setItem(self.items, 0, description_item)
-            self.table.setItem(self.items, 1, price_item)
-            self.items += 1
-
     @Slot()
     def clear_table(self):
         self.table.setRowCount(0)
-        self.items = 0
+        self.expense_count = 0
 
+    def update_total(self):
+        total = self.calculate_total()
+        self.total_value.setText(f"${total:.2f}")
 
-class MainWindow(QMainWindow):
+    def calculate_total(self):
+        total = 0.0
+        for row in range(self.table.rowCount()):
+            try:
+                price = float(self.table.item(row, 1).text())
+                total += price
+            except ValueError:
+                pass
+        return total
+
+class ExpenseTrackerApp(QMainWindow):
     def __init__(self, widget):
         QMainWindow.__init__(self)
-        self.setWindowTitle("Tutorial")
+        self.setWindowTitle("Expense Tracker App")
 
         # Menu
         self.menu = self.menuBar()
@@ -154,16 +164,15 @@ class MainWindow(QMainWindow):
     def exit_app(self, checked):
         QApplication.quit()
 
-
 if __name__ == "__main__":
     # Qt Application
     app = QApplication(sys.argv)
     # QWidget
-    widget = Widget()
-    # QMainWindow using QWidget as central widget
-    window = MainWindow(widget)
+    widget = ExpenseTracker()
+    # QMainWindow using QWidget as the central widget
+    window = ExpenseTrackerApp(widget)
     window.resize(800, 600)
     window.show()
 
-    # Execute application
+    # Execute the application
     sys.exit(app.exec())
